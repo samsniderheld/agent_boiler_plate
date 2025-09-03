@@ -1,0 +1,14 @@
+boto3
+diffusers
+elevenlabs
+google-genai
+gradio
+huggingface_hub
+jwt
+moviepy
+openai
+peft
+python-dotenv
+pyyaml
+runwayml
+
