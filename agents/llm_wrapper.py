@@ -55,7 +55,7 @@ class SchemaGenerator:
                 pydantic_fields[field_name] = (field_type, ...)
             elif isinstance(field_def, dict):
                 # Complex field definition with type, description, default, etc.
-                field_type = SchemaGenerator._get_python_type(field_def.get('type', 'str'))
+                field_type = SchemaGenerator._get_python_type(field_def.get('type', 'str'), field_def.get('schema'))
                 field_description = field_def.get('description', '')
                 field_default = field_def.get('default', ...)
                 
@@ -74,7 +74,7 @@ class SchemaGenerator:
         return model_class
     
     @staticmethod
-    def _get_python_type(type_str: str) -> Type:
+    def _get_python_type(type_str: str, nested_schema: Optional[Dict] = None) -> Type:
         """Convert YAML type string to Python type."""
         type_mapping = {
             'str': str,
@@ -89,17 +89,45 @@ class SchemaGenerator:
             'any': Any,
         }
         
-        # Handle list types like "list[str]"
+        # Handle list types like "list[dict]" with nested schema
         if type_str.startswith('list[') and type_str.endswith(']'):
             inner_type_str = type_str[5:-1]
-            inner_type = SchemaGenerator._get_python_type(inner_type_str)
-            return List[inner_type]
+            if inner_type_str == 'dict' and nested_schema:
+                # Create nested model for the dict structure
+                nested_model = SchemaGenerator._create_nested_model(nested_schema)
+                return List[nested_model]
+            else:
+                inner_type = SchemaGenerator._get_python_type(inner_type_str)
+                return List[inner_type]
         
-        # Handle dict types like "dict[str, any]"
-        if type_str.startswith('dict[') and type_str.endswith(']'):
+        # Handle dict types with nested schema
+        if type_str == 'dict' and nested_schema:
+            return SchemaGenerator._create_nested_model(nested_schema)
+        elif type_str.startswith('dict[') and type_str.endswith(']'):
             return Dict[str, Any]  # Simplified for now
         
         return type_mapping.get(type_str.lower(), str)
+    
+    @staticmethod
+    def _create_nested_model(schema_dict: Dict[str, Any]) -> Type[BaseModel]:
+        """Create a nested Pydantic model from a schema dictionary."""
+        nested_fields = {}
+        
+        for field_name, field_def in schema_dict.items():
+            if isinstance(field_def, str):
+                field_type = SchemaGenerator._get_python_type(field_def)
+                nested_fields[field_name] = (field_type, ...)
+            elif isinstance(field_def, dict):
+                field_type = SchemaGenerator._get_python_type(field_def.get('type', 'str'), field_def.get('schema'))
+                field_description = field_def.get('description', '')
+                field_default = field_def.get('default', ...)
+                
+                if field_default == ...:
+                    nested_fields[field_name] = (field_type, Field(description=field_description))
+                else:
+                    nested_fields[field_name] = (field_type, Field(default=field_default, description=field_description))
+        
+        return create_model('NestedModel', **nested_fields)
     
     @staticmethod
     def _add_custom_methods(model_class: Type[BaseModel], methods: Dict[str, str]):
