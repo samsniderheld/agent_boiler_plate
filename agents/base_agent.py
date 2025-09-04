@@ -28,6 +28,12 @@ class BaseAgent:
             
         self.llm = LLMWrapper(llm, schema_path=schema_path)
         self.name = self.config["name"]
+        self.messages = []
+        self.messages.append({
+                "role": "system",
+                "content": self.config['system_prompt']
+            })
+        
 
     def load_config_file(self, config_file: str) -> Dict[str, Any]:
         """
@@ -65,14 +71,16 @@ class BaseAgent:
         Returns:
             str: The response from the language model.
         """
-        messages = [
-            {
-                "role": "system",
-                "content": self.config['system_prompt']
-            },
-            {"role": "user", "content": query}
-        ]
-        response = self.llm.make_api_call(messages)
+        # messages = [
+        #     {
+        #         "role": "system",
+        #         "content": self.config['system_prompt']
+        #     },
+        #     {"role": "user", "content": query}
+        # ]
+
+        self.messages.append({"role": "user", "content": query})
+        response = self.llm.make_api_call(self.messages)
         return response
 
     def basic_api_call_structured(self, query: str) -> Any:
@@ -86,12 +94,14 @@ class BaseAgent:
         Returns:
             Any: The structured response from the language model.
         """
-        messages = [
-            {
-                "role": "system",
-                "content": self.config['system_prompt']
-            },
-            {"role": "user", "content": query}
-        ]
-        response = self.llm.make_api_call_structured(messages)
+        # messages = [
+        #     {
+        #         "role": "system",
+        #         "content": self.config['system_prompt']
+        #     },
+        #     {"role": "user", "content": query}
+        # ]
+        # response = self.llm.make_api_call_structured(messages)
+        self.messages.append({"role": "user", "content": query})
+        response = self.llm.make_api_call_structured(self.messages)
         return response
