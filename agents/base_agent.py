@@ -1,6 +1,7 @@
 import yaml
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
 from .llm_wrapper import LLMWrapper
+from .vector_store_wrapper import VectorStoreWrapper
 
 class BaseAgent:
     """
@@ -12,7 +13,7 @@ class BaseAgent:
         context (str): Context for the agent.
     """
 
-    def __init__(self, config_file: str = None, llm: str = "openai", schema_path: Optional[str] = None) -> None:
+    def __init__(self, config_file: str = None, llm: str = "openai", schema_path: Optional[str] = None, enable_vector_store: bool = False) -> None:
         """
         Initializes the BaseAgent with a configuration file.
 
@@ -20,6 +21,7 @@ class BaseAgent:
             config_file (str): Path to the configuration file. Defaults to None.
             llm (str): LLM provider to use. Defaults to "openai".
             schema_path (Optional[str]): Path to YAML schema file for structured responses.
+            enable_vector_store (bool): Whether to enable vector store functionality. Defaults to False.
         """
         if config_file:
             self.config = self.load_config_file(config_file)
@@ -33,6 +35,10 @@ class BaseAgent:
                 "role": "system",
                 "content": self.config['system_prompt']
             })
+        
+        # Initialize vector store if enabled
+        self.vector_store = VectorStoreWrapper() if enable_vector_store else None
+        self.vector_store_id = None
         
 
     def load_config_file(self, config_file: str) -> Dict[str, Any]:
@@ -105,3 +111,140 @@ class BaseAgent:
         self.messages.append({"role": "user", "content": query})
         response = self.llm.make_api_call_structured(self.messages)
         return response
+
+    def create_vector_store(self, name: str, file_paths: Optional[List[str]] = None) -> str:
+        """
+        Create a vector store and optionally add files to it.
+        
+        Args:
+            name (str): Name for the vector store
+            file_paths (Optional[List[str]]): List of file paths to upload and add to the vector store
+            
+        Returns:
+            str: Vector store ID
+        """
+        if not self.vector_store:
+            raise ValueError("Vector store not enabled. Initialize agent with enable_vector_store=True")
+        
+        file_ids = []
+        if file_paths:
+            for file_path in file_paths:
+                file_id = self.vector_store.upload_file(file_path)
+                file_ids.append(file_id)
+        
+        self.vector_store_id = self.vector_store.create_vector_store(name, file_ids)
+        return self.vector_store_id
+
+    def add_files_to_vector_store(self, file_paths: List[str], vector_store_id: Optional[str] = None) -> List[str]:
+        """
+        Upload files and add them to the vector store.
+        
+        Args:
+            file_paths (List[str]): List of file paths to upload
+            vector_store_id (Optional[str]): Vector store ID. Uses agent's default if not provided.
+            
+        Returns:
+            List[str]: List of uploaded file IDs
+        """
+        if not self.vector_store:
+            raise ValueError("Vector store not enabled. Initialize agent with enable_vector_store=True")
+        
+        store_id = vector_store_id or self.vector_store_id
+        if not store_id:
+            raise ValueError("No vector store ID available. Create a vector store first.")
+        
+        file_ids = []
+        for file_path in file_paths:
+            file_id = self.vector_store.upload_file(file_path)
+            file_ids.append(file_id)
+        
+        self.vector_store.add_files_to_vector_store(store_id, file_ids)
+        return file_ids
+
+    def search_vector_store(self, query: str, limit: int = 20, vector_store_id: Optional[str] = None, filter_metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Search the vector store for relevant content.
+        
+        Args:
+            query (str): Search query
+            limit (int): Maximum number of results to return
+            vector_store_id (Optional[str]): Vector store ID. Uses agent's default if not provided.
+            filter_metadata (Optional[Dict[str, Any]]): Metadata filters to apply
+            
+        Returns:
+            List[Dict[str, Any]]: List of search results
+        """
+        if not self.vector_store:
+            raise ValueError("Vector store not enabled. Initialize agent with enable_vector_store=True")
+        
+        store_id = vector_store_id or self.vector_store_id
+        if not store_id:
+            raise ValueError("No vector store ID available. Create a vector store first.")
+        
+        return self.vector_store.search_vector_store(store_id, query, limit, filter_metadata)
+
+    def query_with_context(self, query: str, context_query: Optional[str] = None, max_context_results: int = 5) -> str:
+        """
+        Query the LLM with additional context from the vector store.
+        
+        Args:
+            query (str): The main query to send to the LLM
+            context_query (Optional[str]): Query to search vector store for context. Uses main query if not provided.
+            max_context_results (int): Maximum number of context results to include
+            
+        Returns:
+            str: The response from the language model with vector store context
+        """
+        if not self.vector_store or not self.vector_store_id:
+            return self.basic_api_call(query)
+        
+        search_query = context_query or query
+        context_results = self.search_vector_store(search_query, limit=max_context_results)
+        
+        if context_results:
+            context_text = "\n\n".join([result["content"] for result in context_results])
+            enhanced_query = f"Context from knowledge base:\n{context_text}\n\nUser query: {query}"
+        else:
+            enhanced_query = query
+        
+        return self.basic_api_call(enhanced_query)
+
+    def list_vector_stores(self) -> List[Dict[str, Any]]:
+        """
+        List all available vector stores.
+        
+        Returns:
+            List[Dict[str, Any]]: List of vector stores
+        """
+        if not self.vector_store:
+            raise ValueError("Vector store not enabled. Initialize agent with enable_vector_store=True")
+        
+        return self.vector_store.list_vector_stores()
+
+    def set_vector_store(self, vector_store_id: str) -> None:
+        """
+        Set the active vector store for this agent.
+        
+        Args:
+            vector_store_id (str): ID of the vector store to use
+        """
+        self.vector_store_id = vector_store_id
+
+    def get_vector_store_status(self, vector_store_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get status and details of the vector store.
+        
+        Args:
+            vector_store_id (Optional[str]): Vector store ID. Uses agent's default if not provided.
+            
+        Returns:
+            Dict[str, Any]: Vector store status and details
+        """
+        if not self.vector_store:
+            raise ValueError("Vector store not enabled. Initialize agent with enable_vector_store=True")
+        
+        store_id = vector_store_id or self.vector_store_id
+        if not store_id:
+            raise ValueError("No vector store ID available.")
+        
+        return self.vector_store.get_vector_store_status(store_id)
