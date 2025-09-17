@@ -279,3 +279,23 @@ class BaseAgent:
             self.vector_store_id = store_id
             return True
         return False
+
+    def search_for_file(self, query: str, vector_store_id: Optional[str] = None) -> Optional[str]:
+        """
+        Search vector store and return the filename that most closely matches the query.
+        
+        Args:
+            query (str): Search query
+            vector_store_id (Optional[str]): Vector store ID. Uses agent's default if not provided.
+            
+        Returns:
+            Optional[str]: Filename of the most relevant result, None if no results
+        """
+        if not self.vector_store:
+            raise ValueError("Vector store not enabled. Initialize agent with enable_vector_store=True")
+        
+        store_id = vector_store_id or self.vector_store_id
+        if not store_id:
+            raise ValueError("No vector store ID available. Create a vector store first.")
+        
+        return self.vector_store.search_for_file(store_id, query)

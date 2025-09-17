@@ -101,6 +101,7 @@ class VectorStoreWrapper:
         
         return [{"content": result.content } for result in results.data]
     
+    
     def list_vector_stores(self) -> List[Dict[str, Any]]:
         """
         List all vector stores.
@@ -169,4 +170,25 @@ class VectorStoreWrapper:
         for vs in vector_stores:
             if vs["name"] == name:
                 return vs["id"]
+        return None
+    
+    def search_for_file(self, vector_store_id: str, query: str) -> Optional[str]:
+        """
+        Search vector store and return the filename that most closely matches the query.
+        
+        Args:
+            vector_store_id (str): ID of the vector store to search
+            query (str): Search query
+            
+        Returns:
+            Optional[str]: Filename of the most relevant result, None if no results
+        """
+        results = self.search_vector_store(vector_store_id, query, limit=1)
+        
+        if results and len(results) > 0:
+            # Extract filename from metadata if available
+            metadata = results[0].get("metadata", {})
+            filename = metadata.get("filename") or metadata.get("file_name") or metadata.get("source")
+            return filename
+        
         return None
