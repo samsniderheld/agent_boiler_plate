@@ -183,12 +183,21 @@ class VectorStoreWrapper:
         Returns:
             Optional[str]: Filename of the most relevant result, None if no results
         """
-        results = self.search_vector_store(vector_store_id, query, limit=1)
+
+        results = self.client.responses.create(
+            model="gpt-4.1",
+            input=query,
+            tools=[{
+                "type": "file_search",
+                "vector_store_ids": [vector_store_id]
+            }]
+)
+        # results = self.search_vector_store(vector_store_id, query, limit=1)
         
-        if results and len(results) > 0:
-            # Extract filename from metadata if available
-            metadata = results[0].get("metadata", {})
-            filename = metadata.get("filename") or metadata.get("file_name") or metadata.get("source")
-            return filename
+        # if results and len(results) > 0:
+        #     # Extract filename from metadata if available
+        #     metadata = results[0].get("metadata", {})
+        #     filename = metadata.get("filename") or metadata.get("file_name") or metadata.get("source")
+        #     return filename
         
-        return None
+        return results.output[1].content[0].annotations[0].filename
