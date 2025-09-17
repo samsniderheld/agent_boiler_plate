@@ -156,3 +156,19 @@ class VectorStoreWrapper:
             "created_at": vector_store.created_at,
             "last_active_at": vector_store.last_active_at
         }
+    
+    def get_store_id_by_name(self, name: str) -> Optional[str]:
+        """
+        Get the vector store ID by name.
+        
+        Args:
+            name (str): Name of the vector store to find
+            
+        Returns:
+            Optional[str]: Vector store ID if found, None otherwise
+        """
+        vector_stores = self.list_vector_stores()
+        for vs in vector_stores:
+            if vs["name"] == name:
+                return vs["id"]
+        return None

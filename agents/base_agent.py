@@ -248,3 +248,34 @@ class BaseAgent:
             raise ValueError("No vector store ID available.")
         
         return self.vector_store.get_vector_store_status(store_id)
+
+    def get_store_id_by_name(self, name: str) -> Optional[str]:
+        """
+        Get vector store ID by name.
+        
+        Args:
+            name (str): Name of the vector store to find
+            
+        Returns:
+            Optional[str]: Vector store ID if found, None otherwise
+        """
+        if not self.vector_store:
+            raise ValueError("Vector store not enabled. Initialize agent with enable_vector_store=True")
+        
+        return self.vector_store.get_store_id_by_name(name)
+
+    def set_vector_store_by_name(self, name: str) -> bool:
+        """
+        Set the active vector store by name.
+        
+        Args:
+            name (str): Name of the vector store to use
+            
+        Returns:
+            bool: True if found and set, False if not found
+        """
+        store_id = self.get_store_id_by_name(name)
+        if store_id:
+            self.vector_store_id = store_id
+            return True
+        return False
