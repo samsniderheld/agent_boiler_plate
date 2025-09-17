@@ -90,18 +90,16 @@ class VectorStoreWrapper:
         """
         search_params = {
             "query": query,
-            "limit": limit
+            "max_num_results": limit
         }
         
-        if filter_metadata:
-            search_params["filter"] = filter_metadata
             
         results = self.client.vector_stores.search(
             vector_store_id=vector_store_id,
             **search_params
         )
         
-        return [{"content": result.content, "metadata": result.metadata} for result in results.data]
+        return [{"content": result.content } for result in results.data]
     
     def list_vector_stores(self) -> List[Dict[str, Any]]:
         """
