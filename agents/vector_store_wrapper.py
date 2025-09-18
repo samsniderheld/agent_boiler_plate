@@ -1,26 +1,25 @@
-import os
 from typing import List, Dict, Any, Optional
-from openai import OpenAI
+from .vector_store_factory import VectorStoreProviderFactory
+from .vector_store_providers import BaseVectorStoreProvider
 
 
 class VectorStoreWrapper:
     """
-    Wrapper class for OpenAI Vector Stores functionality.
+    Wrapper class for different vector store providers.
     
-    Provides methods to create, manage, and search vector stores.
+    This class provides a unified interface using the provider pattern.
     """
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, provider: str = "openai", **provider_kwargs) -> None:
         """
-        Initialize the VectorStoreWrapper.
+        Initialize the VectorStoreWrapper with the specified provider.
         
         Args:
-            api_key (Optional[str]): OpenAI API key. If not provided, will use OPENAI_API_KEY env var.
+            provider (str): The provider to use ("openai", "chromadb", "chroma")
+            **provider_kwargs: Additional arguments to pass to the provider
         """
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is not set.")
-        self.client = OpenAI(api_key=self.api_key)
+        self.provider_name = provider
+        self.provider = VectorStoreProviderFactory.create_provider(provider, **provider_kwargs)
     
     def create_vector_store(self, name: str, file_ids: Optional[List[str]] = None) -> str:
         """
@@ -33,16 +32,11 @@ class VectorStoreWrapper:
         Returns:
             str: Vector store ID
         """
-        vector_store_data = {"name": name}
-        if file_ids:
-            vector_store_data["file_ids"] = file_ids
-            
-        vector_store = self.client.vector_stores.create(**vector_store_data)
-        return vector_store.id
+        return self.provider.create_vector_store(name, file_ids)
     
     def upload_file(self, file_path: str, purpose: str = "assistants") -> str:
         """
-        Upload a file to OpenAI for use in vector stores.
+        Upload a file for use in vector stores.
         
         Args:
             file_path (str): Path to the file to upload
@@ -51,9 +45,7 @@ class VectorStoreWrapper:
         Returns:
             str: File ID
         """
-        with open(file_path, "rb") as file:
-            uploaded_file = self.client.files.create(file=file, purpose=purpose)
-        return uploaded_file.id
+        return self.provider.upload_file(file_path, purpose)
     
     def add_files_to_vector_store(self, vector_store_id: str, file_ids: List[str]) -> None:
         """
@@ -63,11 +55,7 @@ class VectorStoreWrapper:
             vector_store_id (str): ID of the vector store
             file_ids (List[str]): List of file IDs to add
         """
-        for file_id in file_ids:
-            self.client.vector_stores.files.create(
-                vector_store_id=vector_store_id,
-                file_id=file_id
-            )
+        return self.provider.add_files_to_vector_store(vector_store_id, file_ids)
     
     def search_vector_store(
         self, 
@@ -88,19 +76,7 @@ class VectorStoreWrapper:
         Returns:
             List[Dict[str, Any]]: List of search results with content and metadata
         """
-        search_params = {
-            "query": query,
-            "max_num_results": limit
-        }
-        
-            
-        results = self.client.vector_stores.search(
-            vector_store_id=vector_store_id,
-            **search_params
-        )
-        
-        return [{"content": result.content } for result in results.data]
-    
+        return self.provider.search_vector_store(vector_store_id, query, limit, filter_metadata)
     
     def list_vector_stores(self) -> List[Dict[str, Any]]:
         """
@@ -109,16 +85,7 @@ class VectorStoreWrapper:
         Returns:
             List[Dict[str, Any]]: List of vector stores with id, name, and metadata
         """
-        vector_stores = self.client.vector_stores.list()
-        return [
-            {
-                "id": vs.id, 
-                "name": vs.name, 
-                "created_at": vs.created_at,
-                "file_counts": vs.file_counts
-            } 
-            for vs in vector_stores.data
-        ]
+        return self.provider.list_vector_stores()
     
     def delete_vector_store(self, vector_store_id: str) -> bool:
         """
@@ -130,11 +97,7 @@ class VectorStoreWrapper:
         Returns:
             bool: True if successful, False otherwise
         """
-        try:
-            self.client.vector_stores.delete(vector_store_id)
-            return True
-        except Exception:
-            return False
+        return self.provider.delete_vector_store(vector_store_id)
     
     def get_vector_store_status(self, vector_store_id: str) -> Dict[str, Any]:
         """
@@ -146,19 +109,11 @@ class VectorStoreWrapper:
         Returns:
             Dict[str, Any]: Vector store details including status and file counts
         """
-        vector_store = self.client.vector_stores.retrieve(vector_store_id)
-        return {
-            "id": vector_store.id,
-            "name": vector_store.name,
-            "status": vector_store.status,
-            "file_counts": vector_store.file_counts,
-            "created_at": vector_store.created_at,
-            "last_active_at": vector_store.last_active_at
-        }
+        return self.provider.get_vector_store_status(vector_store_id)
     
     def get_store_id_by_name(self, name: str) -> Optional[str]:
         """
-        Get the vector store ID by name.
+        Get vector store ID by name.
         
         Args:
             name (str): Name of the vector store to find
@@ -166,6 +121,10 @@ class VectorStoreWrapper:
         Returns:
             Optional[str]: Vector store ID if found, None otherwise
         """
+        if hasattr(self.provider, 'get_store_id_by_name'):
+            return self.provider.get_store_id_by_name(name)
+        
+        # Fallback implementation for providers that don't have this method
         vector_stores = self.list_vector_stores()
         for vs in vector_stores:
             if vs["name"] == name:
@@ -183,21 +142,4 @@ class VectorStoreWrapper:
         Returns:
             Optional[str]: Filename of the most relevant result, None if no results
         """
-
-        results = self.client.responses.create(
-            model="gpt-4.1",
-            input=query,
-            tools=[{
-                "type": "file_search",
-                "vector_store_ids": [vector_store_id]
-            }]
-)
-        # results = self.search_vector_store(vector_store_id, query, limit=1)
-        
-        # if results and len(results) > 0:
-        #     # Extract filename from metadata if available
-        #     metadata = results[0].get("metadata", {})
-        #     filename = metadata.get("filename") or metadata.get("file_name") or metadata.get("source")
-        #     return filename
-        
-        return results.output[1].content[0].annotations[0].filename
+        return self.provider.search_for_file(vector_store_id, query)

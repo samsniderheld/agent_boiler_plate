@@ -13,7 +13,7 @@ class BaseAgent:
         context (str): Context for the agent.
     """
 
-    def __init__(self, config_file: str = None, llm: str = "openai", schema_path: Optional[str] = None, enable_vector_store: bool = False) -> None:
+    def __init__(self, config_file: str = None, llm: str = "openai", schema_path: Optional[str] = None, enable_vector_store: bool = False, vector_store_provider: str = "openai", **vector_store_kwargs) -> None:
         """
         Initializes the BaseAgent with a configuration file.
 
@@ -22,6 +22,8 @@ class BaseAgent:
             llm (str): LLM provider to use. Defaults to "openai".
             schema_path (Optional[str]): Path to YAML schema file for structured responses.
             enable_vector_store (bool): Whether to enable vector store functionality. Defaults to False.
+            vector_store_provider (str): Vector store provider to use. Defaults to "openai".
+            **vector_store_kwargs: Additional arguments to pass to the vector store provider.
         """
         if config_file:
             self.config = self.load_config_file(config_file)
@@ -37,7 +39,7 @@ class BaseAgent:
             })
         
         # Initialize vector store if enabled
-        self.vector_store = VectorStoreWrapper() if enable_vector_store else None
+        self.vector_store = VectorStoreWrapper(vector_store_provider, **vector_store_kwargs) if enable_vector_store else None
         self.vector_store_id = None
         
 
