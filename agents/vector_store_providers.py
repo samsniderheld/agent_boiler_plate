@@ -145,7 +145,7 @@ class OpenAIVectorStoreProvider(BaseVectorStoreProvider):
         if file_ids:
             vector_store_data["file_ids"] = file_ids
             
-        vector_store = self.client.beta.vector_stores.create(**vector_store_data)
+        vector_store = self.client.vector_stores.create(**vector_store_data)
         return vector_store.id
     
     def upload_file(self, file_path: str, purpose: str = "assistants") -> str:
@@ -155,7 +155,7 @@ class OpenAIVectorStoreProvider(BaseVectorStoreProvider):
     
     def add_files_to_vector_store(self, vector_store_id: str, file_ids: List[str]) -> None:
         for file_id in file_ids:
-            self.client.beta.vector_stores.files.create(
+            self.client.vector_stores.files.create(
                 vector_store_id=vector_store_id,
                 file_id=file_id
             )
@@ -172,7 +172,7 @@ class OpenAIVectorStoreProvider(BaseVectorStoreProvider):
             "max_num_results": limit
         }
         
-        results = self.client.beta.vector_stores.search(
+        results = self.client.vector_stores.search(
             vector_store_id=vector_store_id,
             **search_params
         )
@@ -180,7 +180,7 @@ class OpenAIVectorStoreProvider(BaseVectorStoreProvider):
         return [{"content": result.content, "metadata": getattr(result, 'metadata', {})} for result in results.data]
     
     def list_vector_stores(self) -> List[Dict[str, Any]]:
-        vector_stores = self.client.beta.vector_stores.list()
+        vector_stores = self.client.vector_stores.list()
         return [
             {
                 "id": vs.id, 
@@ -193,13 +193,13 @@ class OpenAIVectorStoreProvider(BaseVectorStoreProvider):
     
     def delete_vector_store(self, vector_store_id: str) -> bool:
         try:
-            self.client.beta.vector_stores.delete(vector_store_id)
+            self.client.vector_stores.delete(vector_store_id)
             return True
         except Exception:
             return False
     
     def get_vector_store_status(self, vector_store_id: str) -> Dict[str, Any]:
-        vector_store = self.client.beta.vector_stores.retrieve(vector_store_id)
+        vector_store = self.client.vector_stores.retrieve(vector_store_id)
         return {
             "id": vector_store.id,
             "name": vector_store.name,
@@ -210,7 +210,7 @@ class OpenAIVectorStoreProvider(BaseVectorStoreProvider):
         }
     
     def search_for_file(self, vector_store_id: str, query: str) -> Optional[str]:
-        results = self.client.beta.responses.create(
+        results = self.client.responses.create(
             model="gpt-4o",
             input=query,
             tools=[{

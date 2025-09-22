@@ -13,7 +13,7 @@ class BaseAgent:
         context (str): Context for the agent.
     """
 
-    def __init__(self, config_file: str = None, llm: str = "openai", schema_path: Optional[str] = None, enable_vector_store: bool = False, vector_store_provider: str = "openai", **vector_store_kwargs) -> None:
+    def __init__(self, config_file: str = None, llm: str = "openai", schema_path: Optional[str] = None, enable_vector_store: bool = False, vector_store_provider: str = "openai", max_messages: int = 3, **vector_store_kwargs) -> None:
         """
         Initializes the BaseAgent with a configuration file.
 
@@ -23,6 +23,7 @@ class BaseAgent:
             schema_path (Optional[str]): Path to YAML schema file for structured responses.
             enable_vector_store (bool): Whether to enable vector store functionality. Defaults to False.
             vector_store_provider (str): Vector store provider to use. Defaults to "openai".
+            max_messages (int): Maximum number of messages to keep (excluding system prompt). Defaults to 3.
             **vector_store_kwargs: Additional arguments to pass to the vector store provider.
         """
         if config_file:
@@ -32,6 +33,7 @@ class BaseAgent:
             
         self.llm = LLMWrapper(llm, schema_path=schema_path)
         self.name = self.config["name"]
+        self.max_messages = max_messages
         self.messages = []
         self.messages.append({
                 "role": "system",
@@ -65,9 +67,21 @@ class BaseAgent:
             Dict[str, Any]: Default configuration dictionary.
         """
         return {
+            "name": "default_agent",
             "system_prompt": "Default system prompt.",
             "llm": "openAI"
         }
+
+    def _trim_messages(self) -> None:
+        """
+        Trim messages to keep only the system prompt + max_messages.
+        Always keeps the system prompt (first message) and the most recent max_messages.
+        """
+        if len(self.messages) > self.max_messages + 1:  # +1 for system prompt
+            # Keep system prompt + most recent max_messages
+            system_prompt = self.messages[0]
+            recent_messages = self.messages[-(self.max_messages):]
+            self.messages = [system_prompt] + recent_messages
 
     def basic_api_call(self, query: str) -> str:
         """
@@ -88,7 +102,10 @@ class BaseAgent:
         # ]
 
         self.messages.append({"role": "user", "content": query})
+        self._trim_messages()
         response = self.llm.make_api_call(self.messages)
+        self.messages.append({"role": "assistant", "content": response})
+        self._trim_messages()
         return response
 
     def basic_api_call_structured(self, query: str) -> Any:
@@ -111,7 +128,12 @@ class BaseAgent:
         # ]
         # response = self.llm.make_api_call_structured(messages)
         self.messages.append({"role": "user", "content": query})
+        self._trim_messages()
         response = self.llm.make_api_call_structured(self.messages)
+        # For structured responses, convert to string for message history
+        response_str = str(response) if hasattr(response, '__str__') else str(response)
+        self.messages.append({"role": "assistant", "content": response_str})
+        self._trim_messages()
         return response
 
     def create_vector_store(self, name: str, file_paths: Optional[List[str]] = None) -> str:
